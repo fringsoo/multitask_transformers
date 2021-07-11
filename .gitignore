@@ -1,3 +1,6 @@
+*code-workspace
+.vscode
+
 .DS_Store
 __pycache__/
 runs/
