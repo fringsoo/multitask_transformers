@@ -5,6 +5,9 @@ python multitask_sarc_arg.py \
   --data_dir ../data/ \
   --train_file train.v1.txt \
   --eval_file test.v1.txt \
-  --num_train_epochs 3 \
-  --output_dir ./multi_out \
+  --num_train_epochs 1 \
+  --task ADtask \
+  --use_neutral \
+  --train_on_notsarc \
+  --output_dir ../AD_out_test \
   --overwrite_output_dir

@@ -62,6 +62,32 @@ class DataTrainingArguments:
     #     default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     # )
 
+@dataclass
+class GamesarArguments:
+    """
+    Arguments pertaining to what data we are going to input our model for training and eval.
+
+    Using `HfArgumentParser` we can turn this class
+    into argparse arguments to be able to specify them on
+    the command line.
+    """
+
+    task: Optional[str] = field(
+        metadata={"choices":["ADtask","SNStask","Multitask"]}
+    )
+    use_neutral: bool = field(
+        default= False,
+        metadata={"help": "if use_neutral, regard neutral as agree, else filter neutral intances out, defalut FALSE"}
+    )
+    train_on_notsarc: bool = field(
+        default= False,
+        metadata={"help":"if train model only with non-sarcactic instances, defalut FALSE"}
+    )
+    eval_on: Optional[str] = field(
+        default = 'both',
+        metadata = {"choices":['sarc','notsarc','both']}
+    )
+   
 
 @dataclass(frozen=True)
 class InputFeaturesMultitask:

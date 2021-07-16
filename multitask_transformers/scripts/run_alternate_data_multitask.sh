@@ -8,6 +8,6 @@ python multitask_alternate.py \
   --data_dir ../data/ \
   --train_file train.alt.txt \
   --eval_file test.alt.txt \
-  --num_train_epochs 5 \
-  --output_dir ./alt_multi_out \
+  --num_train_epochs 1 \
+  --output_dir ../alt_multi_out \
   --overwrite_output_dir

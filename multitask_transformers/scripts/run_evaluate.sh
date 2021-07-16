@@ -1,0 +1,11 @@
+python evaluation.py \
+  --model_name_or_path ../AD_out_nonsarc_NasA/ \
+  --do_eval \
+  --train_file None \
+  --data_dir ../data/ \
+  --eval_file test.v1.txt \
+  --task ADtask \
+  --eval_on sarc \
+  --use_neutral \
+  --output_dir ../Eval_test \
+  --overwrite_output_dir

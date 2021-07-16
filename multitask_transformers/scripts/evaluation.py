@@ -1,17 +1,17 @@
-from transformers import AutoConfig, EvalPrediction, AutoTokenizer
+from transformers import AutoConfig, EvalPrediction, AutoTokenizer,BertTokenizer
 from transformers import (
     HfArgumentParser,
     TrainingArguments,
     set_seed,
 )
-from multitask_transformers.scripts.trainer import Trainer
 from transformers import DistilBertConfig
 from torch.utils.data import Dataset
 from dataclasses import dataclass, field
 from typing import Dict, Optional
-from multitask_transformers.scripts.utils import InputFeaturesMultitask, f1, DataTrainingArguments,GamesarArguments
+from multitask_transformers.scripts.utils import InputFeaturesMultitask, f1, DataTrainingArguments, GamesarArguments
 from multitask_transformers.scripts.modeling_auto import AutoModelForMultitaskSequenceClassification,\
                             AutoModelForADTaskClassification, AutoModelForSNSTaskClassification
+from multitask_transformers.scripts.evaluator import Evaluator
 import numpy as np
 from multitask_transformers.scripts.utils import store_preds
 
@@ -49,11 +49,6 @@ class SarcArgDataset(Dataset):
         self.data = data
         self.tokenizer = tokenizer
 
-        # batch_encoding = self.tokenizer.batch_encode_plus(
-        # [(example.split('\t')[0], example.split('\t')[1]) for example in self.data if example.split('\t')[0] and example.split('\t')[1]],
-        # add_special_tokens=True, max_length=512, pad_to_max_length=True,
-        # )
-
         batch_encoding = self.tokenizer.batch_encode_plus(
         [(example.split('\t')[0], example.split('\t')[1]) for example in self.data], add_special_tokens=True, max_length=512, pad_to_max_length=True,
         )
@@ -61,7 +56,7 @@ class SarcArgDataset(Dataset):
         self.features = []
         for i in range(len(self.data)):
             inputs = {k: batch_encoding[k][i] for k in batch_encoding}
-            arglab, sarclab = self.data[i].split('\t')[2:4]  
+            arglab, sarclab = self.data[i].split('\t')[2:4]   
             if not sarclab or not arglab:
                 continue
             if use_neutral:
@@ -122,6 +117,43 @@ class NonSarcArgDataset(Dataset):
     def __getitem__(self, idx):
         return self.features[idx]
 
+class SarcOnlyArgDataset(Dataset):
+    def __init__(self, data, tokenizer,use_neutral):
+        self.data = data
+        self.tokenizer = tokenizer
+
+        batch_encoding = self.tokenizer.batch_encode_plus(
+        [(example.split('\t')[0], example.split('\t')[1]) for example in self.data], add_special_tokens=True, max_length=512, pad_to_max_length=True,
+        )
+
+        self.features = []
+        for i in range(len(self.data)):
+            inputs = {k: batch_encoding[k][i] for k in batch_encoding}
+            arglab, sarclab = self.data[i].split('\t')[2:4]  
+            if not sarclab or not arglab:
+                continue
+            if use_neutral:
+                if arglab.strip('\t').strip('\n') == 'neutral' or sarclab.strip('\t').strip('\n') =='notsarc':  # filter out Neutral samples 
+                    continue
+            else: 
+                if sarclab.strip('\t').strip('\n') =='notsarc':  # filter out Neutral samples 
+                    continue
+            feature = InputFeaturesMultitask(  ## token_ids ; attention_mask; token_type_ids; labels
+                **inputs, 
+                labels_t1=label_dict[sarclab.strip('\t').strip('\n')],
+                labels_t2=label_dict[arglab.strip('\t').strip('\n')])
+            self.features.append(feature)
+    
+
+        for i, example in enumerate(self.data[:3]):
+            logger.info("*** Example ***")
+            logger.info("features: %s" % self.features[i])
+
+    def __len__(self):
+        return len(self.features)
+
+    def __getitem__(self, idx):
+        return self.features[idx]
 
 def _use_cuda():
     use_cuda = torch.cuda.is_available()
@@ -140,79 +172,61 @@ def main():
 
     #_use_cuda()
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments,GamesarArguments))
-    model_args, data_args, training_args,gamesar_args = parser.parse_args_into_dataclasses()
+    model_args, data_args, training_args, gamesar_args = parser.parse_args_into_dataclasses()
+    # import pdb;pdb.set_trace()
 
     ADTASK = 'ADtask'
     MULTITASK = 'Multitask'
     SNSTASK = 'SNStask'
-    task = gamesar_args.task
 
-    use_sarc = (not gamesar_args.train_on_notsarc)
+    SARC = "sarc"
+    NONSARC ='notsarc'
+    BOTH = 'both'
+
+    task = gamesar_args.task
+    use_data = gamesar_args.eval_on
     sep_pt_ct = False
     
+
     logger.info("doing %s " % task)
-    # config = AutoConfig.from_pretrained(
-    # model_args.config_name if model_args.config_name else model_args.model_name_or_path,
-    # num_labels=3,
-    # )
-    config = AutoConfig.from_pretrained(
-    model_args.config_name if model_args.config_name else model_args.model_name_or_path,
-    num_labels=2,
-    )
 
     # Set seed
     set_seed(training_args.seed)
 
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
+    config = AutoConfig.from_pretrained(
+    model_args.config_name if model_args.config_name else model_args.model_name_or_path,
+    num_labels=2,
     )
-    if task == MULTITASK:
-        model = AutoModelForMultitaskSequenceClassification.from_pretrained(  
+    model = AutoModelForMultitaskSequenceClassification.from_pretrained(  
             model_args.model_name_or_path,
             config=config,
         )
-    elif task ==ADTASK:
-        model = AutoModelForADTaskClassification.from_pretrained(  
-            model_args.model_name_or_path,
-            config=config,
-        )
-    elif task ==SNSTASK:
-        model = AutoModelForSNSTaskClassification.from_pretrained(  
-            model_args.model_name_or_path,
-            config=config,
-        )
-
+    # tokenizer = AutoTokenizer.from_pretrained(
+    #     model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
+    # )
+    tokenizer = BertTokenizer.from_pretrained(model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path)
 
     # print(model.state_dict())
     # Fetch Datasets
-    if use_sarc :
-        train_set = SarcArgDataset(_load_data(data_args), tokenizer, gamesar_args.use_neutral) if training_args.do_train else None
+    if use_data == BOTH :
         eval_dataset = SarcArgDataset(_load_data(data_args, evaluate=True), tokenizer, gamesar_args.use_neutral) if training_args.do_eval else None
-    else :
-        train_set = NonSarcArgDataset(_load_data(data_args), tokenizer, gamesar_args.use_neutral) if training_args.do_train else None
-        eval_dataset = NonSarcArgDataset(_load_data(data_args, evaluate=True), tokenizer, gamesar_args.use_neutral) if training_args.do_eval else None
+    elif use_data ==NONSARC:
+        eval_dataset = NonSarcArgDataset(_load_data(data_args, evaluate=True), tokenizer,gamesar_args.use_neutral) if training_args.do_eval else None
+    elif use_data ==SARC:
+        eval_dataset = SarcOnlyArgDataset(_load_data(data_args, evaluate=True), tokenizer,gamesar_args.use_neutral) if training_args.do_eval else None
 
     def compute_metrics(p: EvalPrediction) -> Dict:
         preds = np.argmax(p.predictions, axis=1)
         return f1(preds, p.label_ids)
 
-    trainer = Trainer(
+    evaluator = Evaluator(
         model=model,
         args=training_args,
-        train_dataset=train_set,
         eval_dataset=eval_dataset,
         compute_metrics=compute_metrics,
         task = task
     )
-
-    # Training
-    if training_args.do_train:
-        trainer.train(
-            model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
-        )
-        trainer.save_model()
-        tokenizer.save_pretrained(training_args.output_dir)
-
+    
     # Evaluation
     results = {}
     if training_args.do_eval and training_args.local_rank in [-1, 0]:
@@ -220,7 +234,7 @@ def main():
 
         eval_datasets = [eval_dataset]
         for eval_dataset in eval_datasets:
-            result_set = trainer.evaluate(eval_dataset=eval_dataset) 
+            result_set = evaluator.evaluate(eval_dataset=eval_dataset) 
             if task and (task ==ADTASK or task ==SNSTASK):
                 result = result_set.metrics
             else :
@@ -256,9 +270,13 @@ def main():
                 if arglab.strip('\t').strip('\n') == 'neutral':
                     continue
                 else :
-                    if not use_sarc:
+                    if use_data == NONSARC:
                         if sarclab.strip('\t').strip('\n') =='sarc':  
                             continue
+                    elif use_data == SARC:
+                        if sarclab.strip('\t').strip('\n') =='notsarc':
+                            continue
+                    else : pass
                 context.append(ctx)
                 reply.append(rpl)
 

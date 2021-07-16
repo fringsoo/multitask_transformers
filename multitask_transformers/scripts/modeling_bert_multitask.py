@@ -89,6 +89,7 @@ class BertForMultitaskSequenceClassification(BertPreTrainedModel):
         )
 
         pooled_output = outputs[1]
+        ## [CLS] = pt + ct 
 
         pooled_output_t1 = self.dropout_t1(pooled_output)
         logits_t1 = self.classifier_t1(pooled_output_t1)
@@ -162,6 +163,217 @@ class BertForAlternateMultitaskClassification(BertPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), logits, (hidden_states), (attentions)
+
+class BertADTaskClassification(BertPreTrainedModel):
+    config_class = BertConfig
+    pretrained_model_archive_map = BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+    base_model_prefix = "bert"
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.bert = BertModel(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        self.init_weights()
+
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels_t1=None,
+        labels_t2=None
+    ):
+        #labels_t2 : A/D
+        
+        outputs = self.bert(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+        )
+
+        pooled_dropout = self.dropout(outputs[1])
+        logits = self.classifier(pooled_dropout)
+        outputs = (logits,) + outputs[2:]  # (bs, seq_len, dim)
+
+        if labels_t2 is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1,self.num_labels),labels_t2.view(-1))
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), logits, (hidden_states), (attentions)
+
+class BertSNSTaskClassification(BertPreTrainedModel):
+    config_class = BertConfig
+    pretrained_model_archive_map = BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+    base_model_prefix = "bert"
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.bert = BertModel(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        self.init_weights()
+
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels_t1=None,
+        labels_t2=None
+    ):
+        #labels_t2 : A/D
+        
+        outputs = self.bert(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+        )
+
+        pooled_dropout = self.dropout(outputs[1])
+        logits = self.classifier(pooled_dropout)
+        outputs = (logits,) + outputs[2:]  # (bs, seq_len, dim)
+
+        if labels_t1 is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1,self.num_labels),labels_t1.view(-1))
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), logits, (hidden_states), (attentions)
+
+class BertNonSarcForADClassification(BertPreTrainedModel):
+    config_class = BertConfig
+    pretrained_model_archive_map = BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+    base_model_prefix = "bert"
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.bert = BertModel(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        self.init_weights()
+
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels_t1=None,
+        labels_t2=None
+    ):
+        #labels_t2 : A/D
+        
+        outputs = self.bert(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+        )
+
+        pooled_dropout = self.dropout(outputs[1])
+        logits = self.classifier(pooled_dropout)
+        outputs = (logits,) + outputs[2:]  # (bs, seq_len, dim)
+
+        if labels_t1 is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1,self.num_labels),labels_t1.view(-1))
+            outputs = (loss,) + outputs
+
+        return outputs  # (loss), logits, (hidden_states), (attentions)
+
+class BertForSarcClassification(BertPreTrainedModel):
+    config_class = BertConfig
+    pretrained_model_archive_map = BERT_PRETRAINED_MODEL_ARCHIVE_MAP
+    base_model_prefix = "bert"
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.bert = BertModel(config)
+        # self.dropout_t1 = nn.Dropout(config.hidden_dropout_prob)
+        # self.classifier_t1 = nn.Linear(config.hidden_size, config.num_labels)
+        # self.dropout_t2 = nn.Dropout(config.hidden_dropout_prob)
+        # self.classifier_t2 = nn.Linear(config.hidden_size, config.num_labels)
+        self.dropout_pct = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier_pct = nn.Linear(config.hidden_size * 2, config.num_labels)
+
+        self.init_weights()
+
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels_t1=None,
+        labels_t2=None
+    ):
+        
+        outputs = self.bert(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+        )
+        ## [clS] = 101,[SEP] = 102 
+        ## label1:sarc, label2:Agree
+        # pooled_output = outputs[1]
+        where_sep = [i for (i,ids) in list(enumerate(input_ids)) if ids==102]
+        
+        output_pt = outputs[0][:,:where_sep[0],:]
+        output_ct = outputs[0][:,where_sep[0]:where_sep[1],:]
+        pt_repr = torch.mean(output_pt,1)
+        ct_repr = torch.mean(output_ct,1)
+        pct_dropout = self.dropout_pct(torch.cat((pt_repr,ct_repr),1))
+        logits_pct = self.classifier_pct(pct_dropout)
+        outputs = (logits_pct,) + outputs[2:]
+        # pooled_output_t1 = self.dropout_t1(pooled_output)
+        # logits_t1 = self.classifier_t1(pooled_output_t1)
+
+        # pooled_output_t2 = self.dropout_t2(pooled_output)
+        # logits_t2 = self.classifier_t2(pooled_output_t2)
+
+        # outputs = (logits_t1,) + (logits_t2,) +(logits_pct,)+ outputs[2:]  # (bs, seq_len, dim)
+
+        if labels_t1 is not None and labels_t2 is not None:
+            loss_fct = CrossEntropyLoss()
+            # loss_t1 = loss_fct(logits_t1.view(-1, self.num_labels), labels_t1.view(-1))
+            # loss_t2 = loss_fct(logits_t2.view(-1, self.num_labels), labels_t2.view(-1))
+            loss_pct = loss_fct(logits_pct.view(-1,self.num_labels),labels_t2.view(-1))
+            loss = loss_pct
+            # loss = loss_t1 + loss_t2
+            # loss = dynamic_loss(loss_t2, loss_t1)
             outputs = (loss,) + outputs
 
         return outputs  # (loss), logits, (hidden_states), (attentions)
